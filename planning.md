@@ -192,19 +192,44 @@ models.
 
 **Goal:** make the existing local service trustworthy during long-running use.
 
-- Add automated integration tests using a mock or lightweight real runner.
-- Support cancellation for queued requests and active streaming responses.
-- Make queue depth, request timeout, startup timeout, and output-token limits
-  configurable per profile.
-- Add durable structured-log output and clearer child-process crash diagnostics.
-- Record generated-token and throughput metrics for streamed responses as well
-  as regular completions.
+- [x] Add mock-runner integration tests for proxying and streamed cancellation.
+- [x] Cancel queued work and active streamed upstream requests when clients
+  disconnect.
+- [x] Configure queue admission, request/readiness timeout, and output-token
+  limits per profile.
+- [x] Record generated-token and throughput metrics for regular and streamed
+  completions, and expose bounded child-process diagnostics in status.
+- [ ] Add durable structured-log output with an explicit file destination,
+  rotation/retention policy, and documented privacy guarantees.
 
 **Exit criteria:** canceled work does not linger in the queue or runner; a
 failure can be diagnosed from status, metrics, and logs without recording a
 prompt or response.
 
-### 2. OpenAI compatibility
+### 2. Concurrent in-memory sessions
+
+**Goal:** let several local clients hold independent conversations while
+preserving explicit resource limits and the current localhost-only boundary.
+
+- Add a bounded in-memory session store with opaque IDs, idle expiry, a maximum
+  session count, and explicit delete/reset operations.
+- Add session-scoped chat endpoints that append only validated messages and
+  never persist prompts or completions to disk by default.
+- Replace the single global admission policy with a fair, bounded scheduler so
+  one session cannot monopolize all queued work.
+- Add an opt-in `parallel_slots` profile setting. Start `llama-server` with
+  matching server slots only when the profile's memory/context budget supports
+  it; keep one slot as the default.
+- Preserve per-request and per-session cancellation for regular and streamed
+  responses.
+- Benchmark one versus two slots for each supported profile and surface active
+  slot/session counts in status and metrics.
+
+**Exit criteria:** two sessions can stream or complete independently without
+history leakage; cancellation frees a slot; configured memory, queue, and
+session limits are never exceeded.
+
+### 3. OpenAI compatibility
 
 **Goal:** let existing local AI tools use LocalRunner with minimal adaptation.
 
@@ -218,7 +243,7 @@ prompt or response.
 **Exit criteria:** a documented set of OpenAI-style clients can list the active
 model and make regular or streaming chat requests without custom adapters.
 
-### 3. Model management and compatibility checks
+### 4. Model management and compatibility checks
 
 **Goal:** make model selection repeatable and fail early on bad configurations.
 
@@ -233,7 +258,7 @@ model and make regular or streaming chat requests without custom adapters.
 **Exit criteria:** a user can choose a named model confidently and understand
 why LocalRunner accepts, warns about, or rejects its configuration.
 
-### 4. Local AI capabilities
+### 5. Local AI capabilities
 
 **Goal:** support the most useful non-chat local workflows while preserving the
 same lifecycle, queueing, and observability guarantees.
@@ -247,7 +272,7 @@ same lifecycle, queueing, and observability guarantees.
 **Exit criteria:** each added capability has bounded request validation,
 consistent errors, metrics, tests, and a documented compatibility contract.
 
-### 5. Backend abstraction
+### 6. Backend abstraction
 
 **Goal:** make LocalRunner a single local control plane rather than a hard-wired
 `llama.cpp` wrapper.
@@ -261,7 +286,7 @@ consistent errors, metrics, tests, and a documented compatibility contract.
 **Exit criteria:** a second backend can be added without changing the public API
 or weakening lifecycle safety.
 
-### 6. Developer experience
+### 7. Developer experience
 
 **Goal:** make normal local operations visible without requiring raw HTTP calls.
 
@@ -274,7 +299,7 @@ or weakening lifecycle safety.
 **Exit criteria:** a developer can install, configure, run, inspect, and stop a
 model from one coherent workflow.
 
-### 7. Multi-model scheduling
+### 8. Multi-model scheduling
 
 **Goal:** safely evolve beyond one active model without promising simultaneous
 inference before the hardware and scheduling design support it.

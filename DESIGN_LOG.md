@@ -149,3 +149,16 @@ would weaken the single-runner overload guarantee.
 
 **Consequence:** The queue is sized for the largest configured profile and
 enforces the active profile's smaller limit atomically at submission time.
+
+## 2026-10-27 — Sessions before multi-model scheduling
+
+**Choice:** Plan ephemeral, bounded multi-session support before loading more
+than one model at a time.
+
+**Why:** Independent conversations and fair admission provide immediate value
+on one local model, while simultaneous model residency introduces a separate
+memory and lifecycle problem.
+
+**Consequence:** Parallel slots remain opt-in per profile and require
+benchmarking; session persistence and multi-model scheduling stay separate
+later phases.
