@@ -7,7 +7,7 @@ import (
 )
 
 func TestFromEnvDefaultsToLoopback(t *testing.T) {
-	t.Setenv("LOCALRUNNER_LISTEN_ADDRESS", "")
+	t.Setenv("MYLLAMA_LISTEN_ADDRESS", "")
 
 	cfg, err := FromEnv()
 	if err != nil {
@@ -19,7 +19,7 @@ func TestFromEnvDefaultsToLoopback(t *testing.T) {
 }
 
 func TestFromEnvRejectsNonLoopbackHost(t *testing.T) {
-	t.Setenv("LOCALRUNNER_LISTEN_ADDRESS", "0.0.0.0:8080")
+	t.Setenv("MYLLAMA_LISTEN_ADDRESS", "0.0.0.0:8080")
 
 	if _, err := FromEnv(); err == nil {
 		t.Fatal("FromEnv() error = nil, want error")
@@ -32,7 +32,7 @@ func TestFromEnvLoadsProfiles(t *testing.T) {
 	if err := os.WriteFile(path, contents, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("LOCALRUNNER_PROFILES_PATH", path)
+	t.Setenv("MYLLAMA_PROFILES_PATH", path)
 
 	cfg, err := FromEnv()
 	if err != nil {
@@ -52,7 +52,7 @@ func TestFromEnvLoadsProfileRuntimeLimits(t *testing.T) {
 	if err := os.WriteFile(path, contents, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("LOCALRUNNER_PROFILES_PATH", path)
+	t.Setenv("MYLLAMA_PROFILES_PATH", path)
 
 	cfg, err := FromEnv()
 	if err != nil {
@@ -68,9 +68,9 @@ func TestFromEnvLoadsProfileRuntimeLimits(t *testing.T) {
 }
 
 func TestFromEnvLoadsAutoRestartSettings(t *testing.T) {
-	t.Setenv("LOCALRUNNER_AUTO_RESTART", "true")
-	t.Setenv("LOCALRUNNER_AUTO_RESTART_DELAY", "3s")
-	t.Setenv("LOCALRUNNER_MAX_AUTO_RESTARTS", "2")
+	t.Setenv("MYLLAMA_AUTO_RESTART", "true")
+	t.Setenv("MYLLAMA_AUTO_RESTART_DELAY", "3s")
+	t.Setenv("MYLLAMA_MAX_AUTO_RESTARTS", "2")
 
 	cfg, err := FromEnv()
 	if err != nil {
@@ -88,12 +88,12 @@ func TestFromEnvLoadsAutoRestartSettings(t *testing.T) {
 }
 
 func TestFromEnvLoadsAPILimits(t *testing.T) {
-	t.Setenv("LOCALRUNNER_MAX_REQUEST_BYTES", "2048")
-	t.Setenv("LOCALRUNNER_MAX_INPUT_BYTES", "1024")
-	t.Setenv("LOCALRUNNER_MAX_GENERATED_TOKENS", "32")
-	t.Setenv("LOCALRUNNER_DEFAULT_MAX_TOKENS", "16")
-	t.Setenv("LOCALRUNNER_QUEUE_CAPACITY", "3")
-	t.Setenv("LOCALRUNNER_REQUEST_TIMEOUT", "5s")
+	t.Setenv("MYLLAMA_MAX_REQUEST_BYTES", "2048")
+	t.Setenv("MYLLAMA_MAX_INPUT_BYTES", "1024")
+	t.Setenv("MYLLAMA_MAX_GENERATED_TOKENS", "32")
+	t.Setenv("MYLLAMA_DEFAULT_MAX_TOKENS", "16")
+	t.Setenv("MYLLAMA_QUEUE_CAPACITY", "3")
+	t.Setenv("MYLLAMA_REQUEST_TIMEOUT", "5s")
 
 	cfg, err := FromEnv()
 	if err != nil {
@@ -117,10 +117,32 @@ func TestFromEnvLoadsAPILimits(t *testing.T) {
 }
 
 func TestFromEnvRejectsDefaultMaxTokensAboveMaximum(t *testing.T) {
-	t.Setenv("LOCALRUNNER_MAX_GENERATED_TOKENS", "16")
-	t.Setenv("LOCALRUNNER_DEFAULT_MAX_TOKENS", "17")
+	t.Setenv("MYLLAMA_MAX_GENERATED_TOKENS", "16")
+	t.Setenv("MYLLAMA_DEFAULT_MAX_TOKENS", "17")
 
 	if _, err := FromEnv(); err == nil {
 		t.Fatal("FromEnv() error = nil, want error")
+	}
+}
+
+func TestOperationalSettings(t *testing.T) {
+	t.Setenv("MYLLAMA_IDLE_TIMEOUT", "15m")
+	t.Setenv("MYLLAMA_LOG_PATH", "/tmp/myLlama.log")
+	t.Setenv("MYLLAMA_LOG_MAX_BYTES", "4096")
+	t.Setenv("MYLLAMA_LOG_BACKUPS", "2")
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.API.IdleTimeout.String() != "15m0s" || cfg.LogMaxBytes != 4096 || cfg.LogBackups != 2 || cfg.LogPath != "/tmp/myLlama.log" {
+		t.Fatalf("settings = %#v", cfg)
+	}
+	for key, value := range map[string]string{"MYLLAMA_IDLE_TIMEOUT": "-1s", "MYLLAMA_LOG_MAX_BYTES": "0", "MYLLAMA_LOG_BACKUPS": "101"} {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv(key, value)
+			if _, err := FromEnv(); err == nil {
+				t.Fatal("expected configuration error")
+			}
+		})
 	}
 }

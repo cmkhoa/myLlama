@@ -244,7 +244,11 @@ func (m *Manager) Stop(ctx context.Context) (Status, error) {
 	m.status.State, m.status.Healthy = Stopping, false
 	m.mu.Unlock()
 	if cmd == nil || cmd.Process == nil {
-		return Status{}, fmt.Errorf("%w: process is unavailable", ErrInvalidState)
+		m.mu.Lock()
+		m.status.State, m.status.LastError = Stopped, ""
+		status := m.status
+		m.mu.Unlock()
+		return status, nil
 	}
 	if err := cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		m.logger.Warn("graceful runner shutdown signal failed", "error", err)

@@ -1,4 +1,4 @@
-// Package config reads LocalRunner's process-level configuration.
+// Package config reads myLlama's process-level configuration.
 package config
 
 import (
@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"localrunner/internal/api"
-	"localrunner/internal/runner"
+	"myLlama/internal/api"
+	"myLlama/internal/runner"
 )
 
 const defaultListenAddress = "127.0.0.1:8080"
@@ -22,73 +22,93 @@ type Config struct {
 	Runner        runner.Config
 	API           api.Config
 	Profiles      []runner.Profile
+	LogPath       string
+	LogMaxBytes   int64
+	LogBackups    int
 }
 
 // FromEnv loads safe defaults for the local HTTP API.
 func FromEnv() (Config, error) {
-	listenAddress := os.Getenv("LOCALRUNNER_LISTEN_ADDRESS")
+	listenAddress := os.Getenv("MYLLAMA_LISTEN_ADDRESS")
 	if listenAddress == "" {
 		listenAddress = defaultListenAddress
 	}
 
 	host, _, err := net.SplitHostPort(listenAddress)
 	if err != nil {
-		return Config{}, fmt.Errorf("LOCALRUNNER_LISTEN_ADDRESS must be host:port: %w", err)
+		return Config{}, fmt.Errorf("MYLLAMA_LISTEN_ADDRESS must be host:port: %w", err)
 	}
 	if host != "127.0.0.1" && host != "localhost" {
-		return Config{}, fmt.Errorf("LOCALRUNNER_LISTEN_ADDRESS must bind to localhost")
+		return Config{}, fmt.Errorf("MYLLAMA_LISTEN_ADDRESS must bind to localhost")
 	}
 
 	runnerConfig := runner.DefaultConfig()
 	apiConfig := api.DefaultConfig()
-	runnerConfig.Executable = envOrDefault("LOCALRUNNER_LLAMA_SERVER_PATH", runnerConfig.Executable)
-	runnerConfig.Address = envOrDefault("LOCALRUNNER_RUNNER_ADDRESS", runnerConfig.Address)
-	if err := validateLoopbackAddress("LOCALRUNNER_RUNNER_ADDRESS", runnerConfig.Address); err != nil {
+	runnerConfig.Executable = envOrDefault("MYLLAMA_LLAMA_SERVER_PATH", runnerConfig.Executable)
+	runnerConfig.Address = envOrDefault("MYLLAMA_RUNNER_ADDRESS", runnerConfig.Address)
+	if err := validateLoopbackAddress("MYLLAMA_RUNNER_ADDRESS", runnerConfig.Address); err != nil {
 		return Config{}, err
 	}
-	if runnerConfig.ContextSize, err = positiveIntEnv("LOCALRUNNER_CONTEXT_SIZE", runnerConfig.ContextSize); err != nil {
+	if runnerConfig.ContextSize, err = positiveIntEnv("MYLLAMA_CONTEXT_SIZE", runnerConfig.ContextSize); err != nil {
 		return Config{}, err
 	}
-	if runnerConfig.GPULayers, err = nonNegativeIntEnv("LOCALRUNNER_GPU_LAYERS", runnerConfig.GPULayers); err != nil {
+	if runnerConfig.GPULayers, err = nonNegativeIntEnv("MYLLAMA_GPU_LAYERS", runnerConfig.GPULayers); err != nil {
 		return Config{}, err
 	}
-	if runnerConfig.ReadinessTimeout, err = durationEnv("LOCALRUNNER_READINESS_TIMEOUT", runnerConfig.ReadinessTimeout); err != nil {
+	if runnerConfig.ReadinessTimeout, err = durationEnv("MYLLAMA_READINESS_TIMEOUT", runnerConfig.ReadinessTimeout); err != nil {
 		return Config{}, err
 	}
-	if runnerConfig.ShutdownTimeout, err = durationEnv("LOCALRUNNER_SHUTDOWN_TIMEOUT", runnerConfig.ShutdownTimeout); err != nil {
+	if runnerConfig.ShutdownTimeout, err = durationEnv("MYLLAMA_SHUTDOWN_TIMEOUT", runnerConfig.ShutdownTimeout); err != nil {
 		return Config{}, err
 	}
-	if runnerConfig.AutoRestart, err = boolEnv("LOCALRUNNER_AUTO_RESTART", runnerConfig.AutoRestart); err != nil {
+	if runnerConfig.AutoRestart, err = boolEnv("MYLLAMA_AUTO_RESTART", runnerConfig.AutoRestart); err != nil {
 		return Config{}, err
 	}
-	if runnerConfig.AutoRestartDelay, err = durationEnv("LOCALRUNNER_AUTO_RESTART_DELAY", runnerConfig.AutoRestartDelay); err != nil {
+	if runnerConfig.AutoRestartDelay, err = durationEnv("MYLLAMA_AUTO_RESTART_DELAY", runnerConfig.AutoRestartDelay); err != nil {
 		return Config{}, err
 	}
-	if runnerConfig.MaxAutoRestarts, err = nonNegativeIntEnv("LOCALRUNNER_MAX_AUTO_RESTARTS", runnerConfig.MaxAutoRestarts); err != nil {
+	if runnerConfig.MaxAutoRestarts, err = nonNegativeIntEnv("MYLLAMA_MAX_AUTO_RESTARTS", runnerConfig.MaxAutoRestarts); err != nil {
 		return Config{}, err
 	}
-	if apiConfig.MaxRequestBytes, err = positiveInt64Env("LOCALRUNNER_MAX_REQUEST_BYTES", apiConfig.MaxRequestBytes); err != nil {
+	if apiConfig.MaxRequestBytes, err = positiveInt64Env("MYLLAMA_MAX_REQUEST_BYTES", apiConfig.MaxRequestBytes); err != nil {
 		return Config{}, err
 	}
-	if apiConfig.MaxInputBytes, err = positiveIntEnv("LOCALRUNNER_MAX_INPUT_BYTES", apiConfig.MaxInputBytes); err != nil {
+	if apiConfig.MaxInputBytes, err = positiveIntEnv("MYLLAMA_MAX_INPUT_BYTES", apiConfig.MaxInputBytes); err != nil {
 		return Config{}, err
 	}
-	if apiConfig.MaxGeneratedTokens, err = positiveIntEnv("LOCALRUNNER_MAX_GENERATED_TOKENS", apiConfig.MaxGeneratedTokens); err != nil {
+	if apiConfig.MaxGeneratedTokens, err = positiveIntEnv("MYLLAMA_MAX_GENERATED_TOKENS", apiConfig.MaxGeneratedTokens); err != nil {
 		return Config{}, err
 	}
-	if apiConfig.DefaultMaxTokens, err = positiveIntEnv("LOCALRUNNER_DEFAULT_MAX_TOKENS", apiConfig.DefaultMaxTokens); err != nil {
+	if apiConfig.DefaultMaxTokens, err = positiveIntEnv("MYLLAMA_DEFAULT_MAX_TOKENS", apiConfig.DefaultMaxTokens); err != nil {
 		return Config{}, err
 	}
-	if apiConfig.QueueCapacity, err = positiveIntEnv("LOCALRUNNER_QUEUE_CAPACITY", apiConfig.QueueCapacity); err != nil {
+	if apiConfig.QueueCapacity, err = positiveIntEnv("MYLLAMA_QUEUE_CAPACITY", apiConfig.QueueCapacity); err != nil {
 		return Config{}, err
 	}
-	if apiConfig.RequestTimeout, err = durationEnv("LOCALRUNNER_REQUEST_TIMEOUT", apiConfig.RequestTimeout); err != nil {
+	if apiConfig.RequestTimeout, err = durationEnv("MYLLAMA_REQUEST_TIMEOUT", apiConfig.RequestTimeout); err != nil {
 		return Config{}, err
 	}
 	if err := apiConfig.Validate(); err != nil {
 		return Config{}, fmt.Errorf("invalid API limits: %w", err)
 	}
 
+	if value := os.Getenv("MYLLAMA_IDLE_TIMEOUT"); value != "" {
+		apiConfig.IdleTimeout, err = time.ParseDuration(value)
+		if err != nil || apiConfig.IdleTimeout < 0 {
+			return Config{}, fmt.Errorf("MYLLAMA_IDLE_TIMEOUT must be a non-negative Go duration")
+		}
+	}
+	logMaxBytes, err := positiveInt64Env("MYLLAMA_LOG_MAX_BYTES", 10<<20)
+	if err != nil {
+		return Config{}, err
+	}
+	logBackups, err := positiveIntEnv("MYLLAMA_LOG_BACKUPS", 3)
+	if err != nil {
+		return Config{}, err
+	}
+	if logBackups > 100 {
+		return Config{}, fmt.Errorf("MYLLAMA_LOG_BACKUPS must not exceed 100")
+	}
 	profiles, err := profilesFromEnv()
 	if err != nil {
 		return Config{}, err
@@ -106,17 +126,17 @@ func FromEnv() (Config, error) {
 			return Config{}, fmt.Errorf("profile %q default max tokens must not exceed max generated tokens", profile.Name)
 		}
 	}
-	return Config{ListenAddress: listenAddress, Runner: runnerConfig, API: apiConfig, Profiles: profiles}, nil
+	return Config{ListenAddress: listenAddress, Runner: runnerConfig, API: apiConfig, Profiles: profiles, LogPath: os.Getenv("MYLLAMA_LOG_PATH"), LogMaxBytes: logMaxBytes, LogBackups: logBackups}, nil
 }
 
 func profilesFromEnv() ([]runner.Profile, error) {
-	path := os.Getenv("LOCALRUNNER_PROFILES_PATH")
+	path := os.Getenv("MYLLAMA_PROFILES_PATH")
 	if path == "" {
 		return nil, nil
 	}
 	contents, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read LOCALRUNNER_PROFILES_PATH: %w", err)
+		return nil, fmt.Errorf("read MYLLAMA_PROFILES_PATH: %w", err)
 	}
 	var document struct {
 		Profiles map[string]runner.Profile `json:"profiles"`
@@ -124,7 +144,7 @@ func profilesFromEnv() ([]runner.Profile, error) {
 	decoder := json.NewDecoder(strings.NewReader(string(contents)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&document); err != nil {
-		return nil, fmt.Errorf("parse LOCALRUNNER_PROFILES_PATH: %w", err)
+		return nil, fmt.Errorf("parse MYLLAMA_PROFILES_PATH: %w", err)
 	}
 	profiles := make([]runner.Profile, 0, len(document.Profiles))
 	for name, profile := range document.Profiles {

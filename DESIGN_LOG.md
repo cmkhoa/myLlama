@@ -1,4 +1,4 @@
-# LocalRunner Design Log
+# myLlama Design Log
 
 This log records the reasoning behind material product and technical choices.
 Each implementation turn adds a short entry describing the choice, what changed,
@@ -9,7 +9,7 @@ and the tradeoff accepted.
 **Choice:** Keep a human-readable, repository-local design log rather than
 relying on commit messages or chat history alone.
 
-**Why:** LocalRunner is expanding beyond its original weekend MVP. Future work
+**Why:** myLlama is expanding beyond its original weekend MVP. Future work
 needs an auditable record of scope boundaries, compatibility decisions, and
 operational tradeoffs.
 
@@ -18,13 +18,13 @@ the user receives a concise progress explanation in chat.
 
 ## 2026-10-04 — Local control plane, not a new inference engine
 
-**Choice:** Delegate inference to `llama.cpp`; make LocalRunner responsible for
+**Choice:** Delegate inference to `llama.cpp`; make myLlama responsible for
 process lifecycle, queueing, API behavior, health, logs, and metrics.
 
 **Why:** This creates a useful, testable local service without recreating
 quantized inference kernels, tokenizers, GPU backends, and model architectures.
 
-**Consequence:** LocalRunner initially supports one active GGUF model and a
+**Consequence:** myLlama initially supports one active GGUF model and a
 single `llama.cpp` subprocess.
 
 ## 2026-10-04 — Localhost-only, one-worker request execution
@@ -90,7 +90,7 @@ timeout limits configurable only at service startup.
 per request or profile would create unclear behavior for work already queued.
 
 **Consequence:** Operators can tune a local machine without a rebuild, but
-must restart LocalRunner for a change to take effect. Profile-specific limits
+must restart myLlama for a change to take effect. Profile-specific limits
 remain a later design task with explicit reconfiguration semantics.
 
 ## 2026-10-27 — Bounded failure diagnostics in runner status
@@ -149,3 +149,55 @@ would weaken the single-runner overload guarantee.
 
 **Consequence:** The queue is sized for the largest configured profile and
 enforces the active profile's smaller limit atomically at submission time.
+
+## 2026-10-27 — Sessions before multi-model scheduling
+
+**Choice:** Plan ephemeral, bounded multi-session support before loading more
+than one model at a time.
+
+**Why:** Independent conversations and fair admission provide immediate value
+on one local model, while simultaneous model residency introduces a separate
+memory and lifecycle problem.
+
+**Consequence:** Parallel slots remain opt-in per profile and require
+benchmarking; session persistence and multi-model scheduling stay separate
+later phases.
+
+## 2026-11-11 — Release candidates and small delivery units
+
+**Choice:** Begin the public release train at 1.0.0-rc.1, then promote a tested
+contract to 1.0.0. Keep small improvements in focused, independently checked
+commits, including a separate fix for the pre-existing stream cancellation race.
+
+**Why:** The project is now long-term work. A versioned distribution needs
+repeatable builds and compatibility evidence without claiming untested inference
+support. A stable 1.0 does not require every future feature.
+
+**Consequence:** Explicit tags publish only after CI. Real-model validation and
+clean-machine installs remain promotion gates. Roadmap milestones follow
+measurements and dependencies rather than fixed dates.
+
+## 2026-11-11 — Private logs and explicit resource reclamation
+
+**Choice:** Add opt-in size/count-bounded JSON file logs, fixed info-level output,
+idle shutdown that excludes active/queued work, and child cleanup on service exit.
+
+**Why:** A local service should be diagnosable and reclaim memory without
+retaining user content or terminating admitted inference.
+
+**Consequence:** Log paths have one process owner; no age-based retention or raw
+upstream output is promised. Idle shutdown unloads only the model; users explicitly
+restart it. Admission is coordinated with idle stop to avoid a check/use race.
+
+## 2026-11-11 — Tested client subset and portable release artifacts
+
+**Choice:** Use a pinned real Python SDK against the service and a deterministic
+managed mock runner; distribute Linux/macOS binaries for amd64/arm64 with hashes
+and GitHub provenance. CI tests the Go minimum and current stable, but packages
+and vulnerability-checks with current stable.
+
+**Why:** Client integration and process ownership are testable without GPU access
+or downloading weights, while current compiler patches matter for shipped binaries.
+
+**Consequence:** Mock tests do not certify real models or full API compatibility.
+Windows, external hosting and additional backends remain separate proposals.

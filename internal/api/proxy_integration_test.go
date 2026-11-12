@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"localrunner/internal/runner"
+	"myLlama/internal/runner"
 )
 
 type mockRunner struct {

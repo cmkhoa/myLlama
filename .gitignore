@@ -8,3 +8,11 @@
 
 # Machine-specific model profiles.
 configs/*.local.json
+
+# Generated builds, logs, and local Python environments.
+/bin/
+/dist/
+*.log
+*.log.[0-9]*
+.venv/
+__pycache__/

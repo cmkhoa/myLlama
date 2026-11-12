@@ -1,4 +1,4 @@
-// localrunnerctl is a small terminal client for LocalRunner's localhost API.
+// myLlamactl is a small terminal client for myLlama's localhost API.
 package main
 
 import (
@@ -9,9 +9,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"myLlama/internal/buildinfo"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -20,21 +22,30 @@ const defaultAddress = "http://127.0.0.1:8080"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		if slices.Contains(os.Args[1:], "--json") {
+			_ = json.NewEncoder(os.Stderr).Encode(map[string]string{"error": err.Error()})
+		} else {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
 		os.Exit(1)
 	}
 }
 
 func run(arguments []string, stdout, stderr io.Writer) error {
-	flags := flag.NewFlagSet("localrunnerctl", flag.ContinueOnError)
+	flags := flag.NewFlagSet("myLlamactl", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	address := flags.String("address", envOrDefault("LOCALRUNNER_API_URL", defaultAddress), "LocalRunner API URL")
+	if slices.Contains(arguments, "--json") {
+		flags.SetOutput(io.Discard)
+	}
+	address := flags.String("address", envOrDefault("MYLLAMA_API_URL", defaultAddress), "myLlama API URL")
+	jsonOutput := flags.Bool("json", false, "emit compact JSON (chat: full completion; errors: JSON on stderr)")
+	version := flags.Bool("version", false, "print build information and exit")
 	flags.Usage = func() { fmt.Fprint(stderr, usage) }
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
-	if err := validateAddress(*address); err != nil {
-		return err
+	if *version {
+		return json.NewEncoder(stdout).Encode(buildinfo.Current())
 	}
 	remaining := flags.Args()
 	if len(remaining) == 0 {
@@ -42,8 +53,22 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 		return errors.New("a command is required")
 	}
 
-	client := &apiClient{baseURL: strings.TrimRight(*address, "/"), http: &http.Client{Timeout: 2 * time.Minute}}
 	command, args := remaining[0], remaining[1:]
+	switch command {
+	case "version":
+		return json.NewEncoder(stdout).Encode(buildinfo.Current())
+	case "init":
+		return runInit(args, stdout, flags.Output())
+	case "doctor":
+		return runDoctor(args, stdout, flags.Output(), *jsonOutput)
+	case "help", "--help", "-h":
+		fmt.Fprint(stdout, usage)
+		return nil
+	}
+	if err := validateAddress(*address); err != nil {
+		return err
+	}
+	client := &apiClient{baseURL: strings.TrimRight(*address, "/"), http: &http.Client{Timeout: 2 * time.Minute}, jsonOutput: *jsonOutput}
 	switch command {
 	case "status":
 		return client.printJSON(context.Background(), stdout, http.MethodGet, "/v1/runners/status", nil)
@@ -55,22 +80,22 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 		return client.printJSON(context.Background(), stdout, http.MethodGet, "/v1/models/profiles", nil)
 	case "register":
 		if len(args) != 1 {
-			return errors.New("usage: localrunnerctl register <model.gguf>")
+			return errors.New("usage: myLlamactl register <model.gguf>")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/models/register", map[string]string{"path": args[0]})
 	case "activate":
 		if len(args) != 1 {
-			return errors.New("usage: localrunnerctl activate <profile>")
+			return errors.New("usage: myLlamactl activate <profile>")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/models/activate", map[string]string{"name": args[0]})
 	case "start":
 		if len(args) != 0 {
-			return errors.New("usage: localrunnerctl start")
+			return errors.New("usage: myLlamactl start")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/runners/start", nil)
 	case "stop":
 		if len(args) != 0 {
-			return errors.New("usage: localrunnerctl stop")
+			return errors.New("usage: myLlamactl stop")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/runners/stop", nil)
 	case "chat":
@@ -86,6 +111,9 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 func runChat(client *apiClient, arguments []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("chat", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	if client.jsonOutput {
+		flags.SetOutput(io.Discard)
+	}
 	stream := flags.Bool("stream", false, "print server-sent events as they arrive")
 	maxTokens := flags.Int("max-tokens", 256, "maximum generated tokens (1-512)")
 	temperature := flags.Float64("temperature", 0, "sampling temperature (0-2)")
@@ -95,7 +123,7 @@ func runChat(client *apiClient, arguments []string, stdout, stderr io.Writer) er
 	}
 	prompt := strings.TrimSpace(strings.Join(flags.Args(), " "))
 	if prompt == "" {
-		return errors.New("usage: localrunnerctl chat [flags] <prompt>")
+		return errors.New("usage: myLlamactl chat [flags] <prompt>")
 	}
 	payload := map[string]any{
 		"messages":             []map[string]string{{"role": "user", "content": prompt}},
@@ -104,15 +132,22 @@ func runChat(client *apiClient, arguments []string, stdout, stderr io.Writer) er
 		"stream":               *stream,
 		"chat_template_kwargs": map[string]bool{"enable_thinking": *thinking},
 	}
+	if *stream && client.jsonOutput {
+		return errors.New("--json cannot be combined with chat --stream; streaming uses SSE")
+	}
 	if *stream {
 		return client.stream(context.Background(), stdout, payload)
+	}
+	if client.jsonOutput {
+		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/chat/completions", payload)
 	}
 	return client.chat(context.Background(), stdout, payload)
 }
 
 type apiClient struct {
-	baseURL string
-	http    *http.Client
+	baseURL    string
+	http       *http.Client
+	jsonOutput bool
 }
 
 func (client *apiClient) printJSON(ctx context.Context, stdout io.Writer, method, path string, payload any) error {
@@ -123,6 +158,13 @@ func (client *apiClient) printJSON(ctx context.Context, stdout io.Writer, method
 	defer response.Body.Close()
 	if err := checkResponse(response); err != nil {
 		return err
+	}
+	if client.jsonOutput {
+		var value json.RawMessage
+		if err := json.NewDecoder(response.Body).Decode(&value); err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(value)
 	}
 	return prettyPrint(stdout, response.Body)
 }
@@ -221,9 +263,12 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
-const usage = `Usage: localrunnerctl [--address URL] <command> [arguments]
+const usage = `Usage: myLlamactl [--address URL] [--json] [--version] <command> [arguments]
 
 Commands:
+  init [--directory PATH]         Create private configuration files, without overwriting.
+  doctor [--model PATH]           Check local configuration, runner, profiles and ports.
+  version                        Show version, commit, build date and Go version.
   status                         Show runner state and health.
   models                         List OpenAI-compatible model IDs.
   profiles                       List configured model profiles.
@@ -232,6 +277,10 @@ Commands:
   start | stop                   Start or stop the managed runner.
   metrics                        Show process-lifetime metrics.
   chat [flags] <prompt>          Send a chat completion.
+
+Global flags must come before the command. --json emits compact JSON; chat
+returns the full completion. Errors go to stderr; exit status is nonzero.
+--json and chat --stream cannot be combined.
 
 Chat flags:
   --stream                       Print raw SSE events as they arrive.

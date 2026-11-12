@@ -1,4 +1,4 @@
-// Package api provides LocalRunner's localhost HTTP interface.
+// Package api provides myLlama's localhost HTTP interface.
 package api
 
 import (
@@ -14,12 +14,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
-	"localrunner/internal/metrics"
-	"localrunner/internal/queue"
-	"localrunner/internal/runner"
+	"myLlama/internal/metrics"
+	"myLlama/internal/queue"
+	"myLlama/internal/runner"
 )
 
 // Config defines the API's startup-time resource limits. These controls are
@@ -31,6 +32,7 @@ type Config struct {
 	DefaultMaxTokens   int
 	QueueCapacity      int
 	RequestTimeout     time.Duration
+	IdleTimeout        time.Duration
 }
 
 // DefaultConfig returns conservative limits for one local llama.cpp runner.
@@ -63,6 +65,9 @@ func (c Config) Validate() error {
 	if c.QueueCapacity <= 0 {
 		return errors.New("queue capacity must be greater than zero")
 	}
+	if c.IdleTimeout < 0 {
+		return errors.New("idle timeout must not be negative")
+	}
 	if c.RequestTimeout <= 0 {
 		return errors.New("request timeout must be greater than zero")
 	}
@@ -71,12 +76,16 @@ func (c Config) Validate() error {
 
 // Handler owns routing for the public API.
 type Handler struct {
-	runner  runnerService
-	logger  *slog.Logger
-	queue   *queue.Queue[chatResult]
-	client  *http.Client
-	metrics *metrics.Collector
-	config  Config
+	runner       runnerService
+	logger       *slog.Logger
+	queue        *queue.Queue[chatResult]
+	client       *http.Client
+	metrics      *metrics.Collector
+	config       Config
+	serve        http.Handler
+	activityMu   sync.Mutex
+	active       int
+	lastActivity time.Time
 }
 
 // runnerService is the lifecycle surface the HTTP API needs. Keeping it small
@@ -95,18 +104,18 @@ type runnerService interface {
 type requestIDKey struct{}
 
 // NewHandler constructs the v1 API handler.
-func NewHandler(manager *runner.Manager, logger *slog.Logger) http.Handler {
+func NewHandler(manager *runner.Manager, logger *slog.Logger) *Handler {
 	return NewHandlerWithConfig(manager, logger, DefaultConfig())
 }
 
 // NewHandlerWithConfig constructs a handler with validated startup-time API
 // limits. Callers loading configuration from the environment should validate it
 // before this point.
-func NewHandlerWithConfig(manager *runner.Manager, logger *slog.Logger, config Config) http.Handler {
+func NewHandlerWithConfig(manager *runner.Manager, logger *slog.Logger, config Config) *Handler {
 	return newHandler(manager, logger, config)
 }
 
-func newHandler(manager runnerService, logger *slog.Logger, config Config) http.Handler {
+func newHandler(manager runnerService, logger *slog.Logger, config Config) *Handler {
 	if err := config.Validate(); err != nil {
 		panic(fmt.Sprintf("invalid API config: %v", err))
 	}
@@ -127,7 +136,9 @@ func newHandler(manager runnerService, logger *slog.Logger, config Config) http.
 	mux.HandleFunc("POST /v1/runners/stop", h.stopRunner)
 	mux.HandleFunc("POST /v1/chat/completions", h.chatCompletion)
 	mux.HandleFunc("GET /metrics", h.metricsSnapshot)
-	return h.withJSON(mux)
+	h.lastActivity = time.Now()
+	h.serve = h.withJSON(mux)
+	return h
 }
 
 func (h *Handler) runnerStatus(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +183,7 @@ func (h *Handler) listModels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seen[id] = struct{}{}
-		models = append(models, map[string]any{"id": id, "object": "model", "created": 0, "owned_by": "localrunner"})
+		models = append(models, map[string]any{"id": id, "object": "model", "created": 0, "owned_by": "myLlama"})
 	}
 	if status.ActiveProfile != "" {
 		add(status.ActiveProfile)
@@ -233,7 +244,12 @@ type chatRequest struct {
 	MaxTokens          int            `json:"max_tokens,omitempty"`
 	Temperature        *float64       `json:"temperature,omitempty"`
 	Stream             bool           `json:"stream,omitempty"`
+	StreamOptions      *streamOptions `json:"stream_options,omitempty"`
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type chatMessage struct {
@@ -268,6 +284,18 @@ func (h *Handler) chatCompletion(w http.ResponseWriter, r *http.Request) {
 		h.metrics.Record(metrics.Request{ErrorCategory: "invalid_request", Latency: time.Since(started)})
 		h.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
+	}
+	if request.Model != "" {
+		status := h.runner.Status()
+		id := status.ActiveProfile
+		if id == "" {
+			id = status.ActiveModel
+		}
+		if request.Model != id {
+			h.metrics.Record(metrics.Request{ErrorCategory: "model_not_found", Latency: time.Since(started)})
+			h.writeError(w, http.StatusNotFound, "model_not_found", "requested model is not active; activate it before chatting")
+			return
+		}
 	}
 	if request.Stream {
 		h.streamChatCompletion(w, r, request, started, requestID)
@@ -313,9 +341,21 @@ func (h *Handler) streamChatCompletion(w http.ResponseWriter, r *http.Request, r
 	ctx, cancel := context.WithTimeout(r.Context(), limits.RequestTimeout)
 	defer cancel()
 	var streamStarted atomic.Bool
+	var streamMu sync.Mutex
+	streamFinished := false
 	result, queueStats, err := h.queue.SubmitWithLimit(ctx, limits.QueueCapacity, func(ctx context.Context) (chatResult, error) {
+		streamMu.Lock()
+		defer streamMu.Unlock()
+		if streamFinished {
+			return chatResult{}, ctx.Err()
+		}
 		return h.proxyStream(ctx, request, w, &streamStarted)
 	})
+	// Submit may return on cancellation while its worker is still unwinding.
+	// Wait for writer ownership, then revoke it before the handler returns.
+	streamMu.Lock()
+	streamFinished = true
+	streamMu.Unlock()
 	if err != nil {
 		h.metrics.Record(metrics.Request{ErrorCategory: chatErrorCategory(err), QueueWait: queueStats.Wait, Latency: time.Since(started)})
 		var streamed *streamStartedError
@@ -398,6 +438,9 @@ func responseMetrics(response json.RawMessage) (int, time.Duration, float64) {
 }
 
 func (request chatRequest) validate(maxInputBytes, maxGeneratedTokens int) error {
+	if request.StreamOptions != nil && !request.Stream {
+		return errors.New("stream_options requires stream=true")
+	}
 	if len(request.Messages) == 0 {
 		return errors.New("messages is required")
 	}
