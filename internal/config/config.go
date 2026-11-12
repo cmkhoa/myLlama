@@ -22,6 +22,9 @@ type Config struct {
 	Runner        runner.Config
 	API           api.Config
 	Profiles      []runner.Profile
+	LogPath       string
+	LogMaxBytes   int64
+	LogBackups    int
 }
 
 // FromEnv loads safe defaults for the local HTTP API.
@@ -89,6 +92,17 @@ func FromEnv() (Config, error) {
 		return Config{}, fmt.Errorf("invalid API limits: %w", err)
 	}
 
+	logMaxBytes, err := positiveInt64Env("MYLLAMA_LOG_MAX_BYTES", 10<<20)
+	if err != nil {
+		return Config{}, err
+	}
+	logBackups, err := positiveIntEnv("MYLLAMA_LOG_BACKUPS", 3)
+	if err != nil {
+		return Config{}, err
+	}
+	if logBackups > 100 {
+		return Config{}, fmt.Errorf("MYLLAMA_LOG_BACKUPS must not exceed 100")
+	}
 	profiles, err := profilesFromEnv()
 	if err != nil {
 		return Config{}, err
@@ -106,7 +120,7 @@ func FromEnv() (Config, error) {
 			return Config{}, fmt.Errorf("profile %q default max tokens must not exceed max generated tokens", profile.Name)
 		}
 	}
-	return Config{ListenAddress: listenAddress, Runner: runnerConfig, API: apiConfig, Profiles: profiles}, nil
+	return Config{ListenAddress: listenAddress, Runner: runnerConfig, API: apiConfig, Profiles: profiles, LogPath: os.Getenv("MYLLAMA_LOG_PATH"), LogMaxBytes: logMaxBytes, LogBackups: logBackups}, nil
 }
 
 func profilesFromEnv() ([]runner.Profile, error) {

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"io"
 	"log/slog"
-	"myLlama/internal/buildinfo"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,58 +14,71 @@ import (
 	"time"
 
 	"myLlama/internal/api"
+	"myLlama/internal/buildinfo"
 	"myLlama/internal/config"
+	"myLlama/internal/logging"
 	"myLlama/internal/runner"
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("myLlama failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	version := flag.Bool("version", false, "print build information and exit")
 	flag.Parse()
 	if *version {
-		_ = json.NewEncoder(os.Stdout).Encode(buildinfo.Current())
-		return
+		return json.NewEncoder(os.Stdout).Encode(buildinfo.Current())
+	}
+	if flag.NArg() != 0 {
+		return errors.New("myLlama accepts no positional arguments")
 	}
 	cfg, err := config.FromEnv()
 	if err != nil {
-		slog.Error("invalid configuration", "error", err)
-		os.Exit(1)
+		return err
 	}
-
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	var destination io.Writer = os.Stdout
+	if cfg.LogPath != "" {
+		file, err := logging.Open(cfg.LogPath, cfg.LogMaxBytes, cfg.LogBackups)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		destination = file
+	}
+	logger := slog.New(slog.NewJSONHandler(destination, nil))
 	manager := runner.NewManager(cfg.Runner, logger)
 	for _, profile := range cfg.Profiles {
 		if err := manager.AddProfile(profile); err != nil {
-			logger.Error("invalid model profile", "profile", profile.Name, "error", err)
-			os.Exit(1)
+			return err
 		}
 	}
-	server := &http.Server{
-		Addr:              cfg.ListenAddress,
-		Handler:           api.NewHandlerWithConfig(manager, logger, cfg.API),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	errCh := make(chan error, 1)
-	go func() {
-		logger.Info("myLlama listening", "address", cfg.ListenAddress)
-		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-	}()
-
+	handler := api.NewHandlerWithConfig(manager, logger, cfg.API)
+	server := &http.Server{Addr: cfg.ListenAddress, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("myLlama listening", "address", cfg.ListenAddress, "version", buildinfo.Version)
+		errCh <- server.ListenAndServe()
+	}()
+	var serverErr error
 	select {
 	case <-ctx.Done():
 		logger.Info("shutdown signal received")
-	case err := <-errCh:
-		logger.Error("HTTP server failed", "error", err)
+	case serverErr = <-errCh:
 	}
-
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP shutdown failed", "error", err)
+		_ = server.Close()
 	}
+	if serverErr != nil && !errors.Is(serverErr, http.ErrServerClosed) {
+		return serverErr
+	}
+	return nil
 }
