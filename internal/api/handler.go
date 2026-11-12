@@ -244,7 +244,12 @@ type chatRequest struct {
 	MaxTokens          int            `json:"max_tokens,omitempty"`
 	Temperature        *float64       `json:"temperature,omitempty"`
 	Stream             bool           `json:"stream,omitempty"`
+	StreamOptions      *streamOptions `json:"stream_options,omitempty"`
 	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type chatMessage struct {
@@ -279,6 +284,18 @@ func (h *Handler) chatCompletion(w http.ResponseWriter, r *http.Request) {
 		h.metrics.Record(metrics.Request{ErrorCategory: "invalid_request", Latency: time.Since(started)})
 		h.writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
+	}
+	if request.Model != "" {
+		status := h.runner.Status()
+		id := status.ActiveProfile
+		if id == "" {
+			id = status.ActiveModel
+		}
+		if request.Model != id {
+			h.metrics.Record(metrics.Request{ErrorCategory: "model_not_found", Latency: time.Since(started)})
+			h.writeError(w, http.StatusNotFound, "model_not_found", "requested model is not active; activate it before chatting")
+			return
+		}
 	}
 	if request.Stream {
 		h.streamChatCompletion(w, r, request, started, requestID)
@@ -421,6 +438,9 @@ func responseMetrics(response json.RawMessage) (int, time.Duration, float64) {
 }
 
 func (request chatRequest) validate(maxInputBytes, maxGeneratedTokens int) error {
+	if request.StreamOptions != nil && !request.Stream {
+		return errors.New("stream_options requires stream=true")
+	}
 	if len(request.Messages) == 0 {
 		return errors.New("messages is required")
 	}

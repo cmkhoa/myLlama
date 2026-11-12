@@ -62,6 +62,28 @@ curl --no-buffer http://127.0.0.1:8080/v1/chat/completions \
   -d '{"messages":[{"role":"user","content":"Count to three."}],"stream":true}'
 ```
 
-The supported subset is intentionally small: messages, `max_tokens`,
-`temperature`, `stream`, and `chat_template_kwargs`. See
+The supported subset is intentionally small: `model`, messages, `max_tokens`,
+`temperature`, `stream`, `stream_options.include_usage`, and `chat_template_kwargs`.
+If `model` is supplied, it must match the active profile ID (or registered model
+basename); an inactive/unknown model returns HTTP 404 with `model_not_found`.
+Listing a configured model does not load it or route requests to it automatically.
+`stream_options` requires `stream=true`; usage events depend on upstream support. See
 [Operations](OPERATIONS.md) for configurable limits and error behavior.
+
+## Client compatibility contract
+
+CI uses the real Python OpenAI SDK **2.8.1** against the actual service binary and
+a managed deterministic mock runner. It covers model listing, regular completions,
+SSE completion chunks, usage events, unknown-model errors and invalid token limits.
+No cloud requests or actual API key are used. This follows the client patterns in
+[the official Python documentation](https://developers.openai.com/api/reference/python).
+
+For a local client, set `base_url="http://127.0.0.1:8080/v1"` and a dummy
+`api_key="local-only"`. The service has no API-key authentication; the dummy value
+only satisfies the SDK constructor. Remain on localhost.
+
+This is a tested subset, not full OpenAI compatibility. Unsupported request fields
+are rejected rather than silently ignored. Tool messages, multimodal content,
+Responses API, embeddings and structured output are future work. CI fixtures do
+not prove every llama.cpp build/model emits the same response shape; pin and record
+real runtime/model revisions before a stable release.
