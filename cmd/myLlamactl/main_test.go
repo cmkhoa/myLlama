@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -23,5 +25,34 @@ func TestJSONChatPreservesCompletionAndUsage(t *testing.T) {
 	}
 	if !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"completion_tokens":1`) {
 		t.Fatal(out.String())
+	}
+}
+
+func TestInitDoesNotOverwriteConfiguration(t *testing.T) {
+	directory := t.TempDir()
+	var out, stderr bytes.Buffer
+	args := []string{"init", "--directory", directory}
+	if err := run(args, &out, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "profiles.json")
+	if err := os.WriteFile(path, []byte("keep me"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(args, &out, &stderr); err == nil {
+		t.Fatal("expected overwrite refusal")
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "keep me" {
+		t.Fatal("configuration overwritten")
+	}
+}
+
+func TestDoctorReportsConfigurationFailureAsJSON(t *testing.T) {
+	t.Setenv("MYLLAMA_LISTEN_ADDRESS", "0.0.0.0:8080")
+	var out, stderr bytes.Buffer
+	err := run([]string{"--json", "doctor"}, &out, &stderr)
+	if err == nil || !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"ok":false`) {
+		t.Fatalf("report=%s, error=%v", out.String(), err)
 	}
 }

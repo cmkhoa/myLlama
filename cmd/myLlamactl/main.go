@@ -57,6 +57,10 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 	switch command {
 	case "version":
 		return json.NewEncoder(stdout).Encode(buildinfo.Current())
+	case "init":
+		return runInit(args, stdout, flags.Output())
+	case "doctor":
+		return runDoctor(args, stdout, flags.Output(), *jsonOutput)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, usage)
 		return nil
@@ -262,6 +266,8 @@ func envOrDefault(key, fallback string) string {
 const usage = `Usage: myLlamactl [--address URL] [--json] [--version] <command> [arguments]
 
 Commands:
+  init [--directory PATH]         Create private configuration files, without overwriting.
+  doctor [--model PATH]           Check local configuration, runner, profiles and ports.
   version                        Show version, commit, build date and Go version.
   status                         Show runner state and health.
   models                         List OpenAI-compatible model IDs.
