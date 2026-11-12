@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"localrunner/internal/api"
-	"localrunner/internal/config"
-	"localrunner/internal/runner"
+	"myLlama/internal/api"
+	"myLlama/internal/config"
+	"myLlama/internal/runner"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("LocalRunner listening", "address", cfg.ListenAddress)
+		logger.Info("myLlama listening", "address", cfg.ListenAddress)
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}

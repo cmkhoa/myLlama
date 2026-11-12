@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"localrunner/internal/api"
-	"localrunner/internal/runner"
+	"myLlama/internal/api"
+	"myLlama/internal/runner"
 )
 
 func TestRunnerStatusStartsStopped(t *testing.T) {
@@ -105,7 +105,7 @@ func TestListModelsUsesProfileNamesInsteadOfPaths(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusOK)
 	}
-	if got, want := response.Body.String(), "{\"data\":[{\"created\":0,\"id\":\"local-qwen\",\"object\":\"model\",\"owned_by\":\"localrunner\"}],\"object\":\"list\"}\n"; got != want {
+	if got, want := response.Body.String(), "{\"data\":[{\"created\":0,\"id\":\"local-qwen\",\"object\":\"model\",\"owned_by\":\"myLlama\"}],\"object\":\"list\"}\n"; got != want {
 		t.Errorf("response body = %q, want %q", got, want)
 	}
 	if bytes.Contains(response.Body.Bytes(), []byte(path)) {

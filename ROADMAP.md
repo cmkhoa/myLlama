@@ -1,4 +1,4 @@
-# LocalRunner — Product and Delivery Roadmap
+# myLlama — Product and Delivery Roadmap
 
 ## 1. Product definition
 
@@ -12,7 +12,7 @@ understand whether the model is working well.
 
 ### Product promise
 
-LocalRunner turns one local `llama.cpp` server and one explicitly selected GGUF
+myLlama turns one local `llama.cpp` server and one explicitly selected GGUF
 file into a dependable localhost service.
 
 It owns lifecycle and operations; `llama.cpp` owns inference.
@@ -25,11 +25,11 @@ who wants to call one local model via HTTP without hand-managing the underlying
 
 ### First successful user journey
 
-1. Configure the LocalRunner binary with the path to `llama-server`.
+1. Configure the myLlama binary with the path to `llama-server`.
 2. Register a local `.gguf` file by absolute path.
 3. Start the runner and wait until its status is `ready`.
-4. Send a non-streaming chat request to LocalRunner.
-5. Receive the model response from LocalRunner.
+4. Send a non-streaming chat request to myLlama.
+5. Receive the model response from myLlama.
 6. Inspect status and metrics.
 7. Stop the runner; verify no child process remains.
 
@@ -62,7 +62,7 @@ who wants to call one local model via HTTP without hand-managing the underlying
 Local client
      |
      v
-LocalRunner HTTP API (127.0.0.1)
+myLlama HTTP API (127.0.0.1)
   ├─ registry/configuration
   ├─ runner manager + state machine
   ├─ single-worker FIFO queue
@@ -177,12 +177,12 @@ runner.
 - Validate body size, messages/input, maximum output tokens, and caller timeout.
 - Implement a cancellable single-worker FIFO queue.
 - Proxy queue jobs to the active runner with a bounded upstream timeout.
-- Return upstream responses with a documented LocalRunner error mapping.
+- Return upstream responses with a documented myLlama error mapping.
 - Add request IDs to responses and structured operational logs.
 
 **Exit criteria**
 
-- A valid request returns generated text through LocalRunner.
+- A valid request returns generated text through myLlama.
 - Two simultaneous requests complete in submission order.
 - An invalid request never reaches the runner.
 - Requests fail predictably while stopped, starting, unhealthy, stopping, or
@@ -277,7 +277,7 @@ Only consider these once all Phase 4 exit criteria pass.
 ## 8. MVP acceptance checklist
 
 - [ ] A valid local GGUF file can be registered by explicit path.
-- [ ] LocalRunner launches and health-checks the configured `llama-server`.
+- [ ] myLlama launches and health-checks the configured `llama-server`.
 - [ ] Status exposes each runner state and active-model information.
 - [ ] A non-streaming chat request reaches the model and returns a response.
 - [ ] Concurrent requests are serialized FIFO, with bounded queue capacity.
@@ -300,4 +300,4 @@ Build only enough to reach this vertical slice:
 4. `POST /v1/runners/stop` reaps the process safely.
 
 Do not add chat proxying before this lifecycle slice is repeatable. It is the
-foundation that distinguishes LocalRunner from a thin HTTP forwarder.
+foundation that distinguishes myLlama from a thin HTTP forwarder.

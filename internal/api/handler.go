@@ -1,4 +1,4 @@
-// Package api provides LocalRunner's localhost HTTP interface.
+// Package api provides myLlama's localhost HTTP interface.
 package api
 
 import (
@@ -17,9 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"localrunner/internal/metrics"
-	"localrunner/internal/queue"
-	"localrunner/internal/runner"
+	"myLlama/internal/metrics"
+	"myLlama/internal/queue"
+	"myLlama/internal/runner"
 )
 
 // Config defines the API's startup-time resource limits. These controls are
@@ -172,7 +172,7 @@ func (h *Handler) listModels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seen[id] = struct{}{}
-		models = append(models, map[string]any{"id": id, "object": "model", "created": 0, "owned_by": "localrunner"})
+		models = append(models, map[string]any{"id": id, "object": "model", "created": 0, "owned_by": "myLlama"})
 	}
 	if status.ActiveProfile != "" {
 		add(status.ActiveProfile)

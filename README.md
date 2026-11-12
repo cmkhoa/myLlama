@@ -1,6 +1,6 @@
-# LocalRunner
+# myLlama
 
-LocalRunner is a localhost control plane for one `llama.cpp` model runner. It
+myLlama is a localhost control plane for one `llama.cpp` model runner. It
 starts and supervises `llama-server`, serializes chat requests, and exposes
 health, metrics, logs, profiles, and an OpenAI-shaped chat API. `llama.cpp`
 continues to perform inference.
@@ -14,11 +14,11 @@ Prerequisites: Go, a compatible `llama-server` executable on `PATH`, and a
 local `.gguf` model.
 
 ```sh
-go run ./cmd/localrunner
-go run ./cmd/localrunnerctl register /absolute/path/to/model.gguf
-go run ./cmd/localrunnerctl start
-go run ./cmd/localrunnerctl chat "Explain LocalRunner in one sentence."
-go run ./cmd/localrunnerctl stop
+go run ./cmd/myLlama
+go run ./cmd/myLlamactl register /absolute/path/to/model.gguf
+go run ./cmd/myLlamactl start
+go run ./cmd/myLlamactl chat "Explain myLlama in one sentence."
+go run ./cmd/myLlamactl stop
 ```
 
 The API listens on `127.0.0.1:8080`; the managed runner listens on
@@ -39,5 +39,5 @@ make verify
 make build
 ```
 
-LocalRunner does not download models, accept arbitrary runner arguments, retain
+myLlama does not download models, accept arbitrary runner arguments, retain
 prompts or completions, or support public/multi-user deployment.

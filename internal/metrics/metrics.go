@@ -41,7 +41,7 @@ type Snapshot struct {
 	} `json:"generation"`
 }
 
-// Collector stores counters and aggregates for the lifetime of LocalRunner.
+// Collector stores counters and aggregates for the lifetime of myLlama.
 type Collector struct {
 	mu                 sync.RWMutex
 	total              uint64

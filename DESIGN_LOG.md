@@ -1,4 +1,4 @@
-# LocalRunner Design Log
+# myLlama Design Log
 
 This log records the reasoning behind material product and technical choices.
 Each implementation turn adds a short entry describing the choice, what changed,
@@ -9,7 +9,7 @@ and the tradeoff accepted.
 **Choice:** Keep a human-readable, repository-local design log rather than
 relying on commit messages or chat history alone.
 
-**Why:** LocalRunner is expanding beyond its original weekend MVP. Future work
+**Why:** myLlama is expanding beyond its original weekend MVP. Future work
 needs an auditable record of scope boundaries, compatibility decisions, and
 operational tradeoffs.
 
@@ -18,13 +18,13 @@ the user receives a concise progress explanation in chat.
 
 ## 2026-10-04 — Local control plane, not a new inference engine
 
-**Choice:** Delegate inference to `llama.cpp`; make LocalRunner responsible for
+**Choice:** Delegate inference to `llama.cpp`; make myLlama responsible for
 process lifecycle, queueing, API behavior, health, logs, and metrics.
 
 **Why:** This creates a useful, testable local service without recreating
 quantized inference kernels, tokenizers, GPU backends, and model architectures.
 
-**Consequence:** LocalRunner initially supports one active GGUF model and a
+**Consequence:** myLlama initially supports one active GGUF model and a
 single `llama.cpp` subprocess.
 
 ## 2026-10-04 — Localhost-only, one-worker request execution
@@ -90,7 +90,7 @@ timeout limits configurable only at service startup.
 per request or profile would create unclear behavior for work already queued.
 
 **Consequence:** Operators can tune a local machine without a rebuild, but
-must restart LocalRunner for a change to take effect. Profile-specific limits
+must restart myLlama for a change to take effect. Profile-specific limits
 remain a later design task with explicit reconfiguration semantics.
 
 ## 2026-10-27 — Bounded failure diagnostics in runner status

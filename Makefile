@@ -15,7 +15,7 @@ vet:
 verify: check-format test vet
 
 run:
-	go run ./cmd/localrunner
+	go run ./cmd/myLlama
 
 build:
-	go build ./cmd/localrunner ./cmd/localrunnerctl
+	go build ./cmd/myLlama ./cmd/myLlamactl

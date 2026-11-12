@@ -1,4 +1,4 @@
-// localrunnerctl is a small terminal client for LocalRunner's localhost API.
+// myLlamactl is a small terminal client for myLlama's localhost API.
 package main
 
 import (
@@ -26,9 +26,9 @@ func main() {
 }
 
 func run(arguments []string, stdout, stderr io.Writer) error {
-	flags := flag.NewFlagSet("localrunnerctl", flag.ContinueOnError)
+	flags := flag.NewFlagSet("myLlamactl", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	address := flags.String("address", envOrDefault("LOCALRUNNER_API_URL", defaultAddress), "LocalRunner API URL")
+	address := flags.String("address", envOrDefault("MYLLAMA_API_URL", defaultAddress), "myLlama API URL")
 	flags.Usage = func() { fmt.Fprint(stderr, usage) }
 	if err := flags.Parse(arguments); err != nil {
 		return err
@@ -55,22 +55,22 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 		return client.printJSON(context.Background(), stdout, http.MethodGet, "/v1/models/profiles", nil)
 	case "register":
 		if len(args) != 1 {
-			return errors.New("usage: localrunnerctl register <model.gguf>")
+			return errors.New("usage: myLlamactl register <model.gguf>")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/models/register", map[string]string{"path": args[0]})
 	case "activate":
 		if len(args) != 1 {
-			return errors.New("usage: localrunnerctl activate <profile>")
+			return errors.New("usage: myLlamactl activate <profile>")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/models/activate", map[string]string{"name": args[0]})
 	case "start":
 		if len(args) != 0 {
-			return errors.New("usage: localrunnerctl start")
+			return errors.New("usage: myLlamactl start")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/runners/start", nil)
 	case "stop":
 		if len(args) != 0 {
-			return errors.New("usage: localrunnerctl stop")
+			return errors.New("usage: myLlamactl stop")
 		}
 		return client.printJSON(context.Background(), stdout, http.MethodPost, "/v1/runners/stop", nil)
 	case "chat":
@@ -95,7 +95,7 @@ func runChat(client *apiClient, arguments []string, stdout, stderr io.Writer) er
 	}
 	prompt := strings.TrimSpace(strings.Join(flags.Args(), " "))
 	if prompt == "" {
-		return errors.New("usage: localrunnerctl chat [flags] <prompt>")
+		return errors.New("usage: myLlamactl chat [flags] <prompt>")
 	}
 	payload := map[string]any{
 		"messages":             []map[string]string{{"role": "user", "content": prompt}},
@@ -221,7 +221,7 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
-const usage = `Usage: localrunnerctl [--address URL] <command> [arguments]
+const usage = `Usage: myLlamactl [--address URL] <command> [arguments]
 
 Commands:
   status                         Show runner state and health.

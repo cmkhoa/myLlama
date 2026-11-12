@@ -1,18 +1,18 @@
-# LocalRunner — Weekend MVP Plan
+# myLlama — Weekend MVP Plan
 
 ## Goal
 
 Build a small, local LLM runner manager that starts and supervises a `llama.cpp` server process, exposes a single model through a clean HTTP API, and reports useful runtime health and performance information.
 
-The project is **not** a new inference engine or a full Ollama replacement. `llama.cpp` performs inference; LocalRunner owns process lifecycle, request routing, API design, queuing, health, and observability.
+The project is **not** a new inference engine or a full Ollama replacement. `llama.cpp` performs inference; myLlama owns process lifecycle, request routing, API design, queuing, health, and observability.
 
 ## Definition of done
 
 By Sunday night, a reviewer can:
 
 1. Register one local GGUF model by an explicit file path.
-2. Start a `llama.cpp` runner through LocalRunner.
-3. Send a chat request to LocalRunner and receive a generated response.
+2. Start a `llama.cpp` runner through myLlama.
+3. Send a chat request to myLlama and receive a generated response.
 4. Check whether the runner is healthy and whether a model is loaded.
 5. View request count, failures, latency, and generated-token throughput.
 6. Stop the runner cleanly and restart it without orphaned processes.
@@ -47,7 +47,7 @@ If the core API works early, streaming is the one optional enhancement worth con
 Client
   |
   v
-LocalRunner API (Go)
+myLlama API (Go)
   |- model registry: validated local GGUF path
   |- runner manager: start / stop / restart / health
   |- FIFO request queue
@@ -104,7 +104,7 @@ For every request, record only operational data—never persist the prompt or ge
 
 ### Saturday morning — runner lifecycle
 
-**Outcome:** LocalRunner can register, start, health-check, and stop one model runner.
+**Outcome:** myLlama can register, start, health-check, and stop one model runner.
 
 - Implement GGUF-path validation and model registration.
 - Implement subprocess launch using an explicit `llama.cpp` executable path and arguments.
@@ -116,7 +116,7 @@ For every request, record only operational data—never persist the prompt or ge
 
 ### Saturday afternoon — request proxy and queue
 
-**Outcome:** A client can submit a chat request through LocalRunner.
+**Outcome:** A client can submit a chat request through myLlama.
 
 - Implement `POST /v1/chat/completions`.
 - Validate request limits: input size, maximum generated tokens, and timeout.
@@ -151,8 +151,8 @@ For every request, record only operational data—never persist the prompt or ge
 ## Recommended repository structure
 
 ```text
-localrunner/
-├── cmd/localrunner/        # application entry point
+myLlama/
+├── cmd/myLlama/        # application entry point
 ├── internal/
 │   ├── api/                # HTTP handlers and request validation
 │   ├── runner/             # subprocess lifecycle and state machine
@@ -185,7 +185,7 @@ localrunner/
 
 The product should grow into a dependable local AI runtime and control plane,
 not a replacement inference engine. `llama.cpp` remains the first inference
-backend; LocalRunner's value is a consistent developer experience around local
+backend; myLlama's value is a consistent developer experience around local
 models.
 
 ### 1. Runtime hardening
@@ -231,14 +231,14 @@ session limits are never exceeded.
 
 ### 3. OpenAI compatibility
 
-**Goal:** let existing local AI tools use LocalRunner with minimal adaptation.
+**Goal:** let existing local AI tools use myLlama with minimal adaptation.
 
 - Add `GET /v1/models` for the active model and configured profiles.
 - Define and test the supported OpenAI-compatible subset of chat-completion
   request and response fields.
 - Add an optional localhost API key for tools that require one, without
   implying public deployment or multi-user support.
-- Add a machine-readable/JSON-output mode to `localrunnerctl`.
+- Add a machine-readable/JSON-output mode to `myLlamactl`.
 
 **Exit criteria:** a documented set of OpenAI-style clients can list the active
 model and make regular or streaming chat requests without custom adapters.
@@ -256,7 +256,7 @@ model and make regular or streaming chat requests without custom adapters.
 - Persist per-profile benchmark history with exact machine and runtime settings.
 
 **Exit criteria:** a user can choose a named model confidently and understand
-why LocalRunner accepts, warns about, or rejects its configuration.
+why myLlama accepts, warns about, or rejects its configuration.
 
 ### 5. Local AI capabilities
 
@@ -274,7 +274,7 @@ consistent errors, metrics, tests, and a documented compatibility contract.
 
 ### 6. Backend abstraction
 
-**Goal:** make LocalRunner a single local control plane rather than a hard-wired
+**Goal:** make myLlama a single local control plane rather than a hard-wired
 `llama.cpp` wrapper.
 
 - Define a runner-backend interface for lifecycle, health, chat, streaming, and
@@ -290,7 +290,7 @@ or weakening lifecycle safety.
 
 **Goal:** make normal local operations visible without requiring raw HTTP calls.
 
-- Expand `localrunnerctl` with profile management, readable streaming output,
+- Expand `myLlamactl` with profile management, readable streaming output,
   JSON output, and benchmark commands.
 - Consider a lightweight terminal UI before a browser dashboard.
 - If a web UI is added, limit it to local status, model/profile selection, live
@@ -316,6 +316,6 @@ memory budget, or leave orphaned processes.
 
 Use this only when the listed functionality is implemented:
 
-> Built LocalRunner, a local LLM runner manager in Go that supervises `llama.cpp` inference processes and exposes GGUF models through a REST API with request queuing, health checks, structured logging, and runtime metrics.
+> Built myLlama, a local LLM runner manager in Go that supervises `llama.cpp` inference processes and exposes GGUF models through a REST API with request queuing, health checks, structured logging, and runtime metrics.
 
 After running benchmarks, add one real measured result—such as P50 latency, token throughput, or successful recovery after a killed runner process.
