@@ -1,2 +1,2 @@
 # This known client version is a compatibility baseline, not a claim of full API parity.
-openai==2.8.1
+openai==3.46.0
