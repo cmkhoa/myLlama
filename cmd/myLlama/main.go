@@ -60,6 +60,9 @@ func run() error {
 	server := &http.Server{Addr: cfg.ListenAddress, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	monitorCtx, cancelMonitor := context.WithCancel(ctx)
+	monitorDone := make(chan struct{})
+	go func() { defer close(monitorDone); handler.RunIdleMonitor(monitorCtx) }()
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("myLlama listening", "address", cfg.ListenAddress, "version", buildinfo.Version)
@@ -71,11 +74,21 @@ func run() error {
 		logger.Info("shutdown signal received")
 	case serverErr = <-errCh:
 	}
+	cancelMonitor()
+	<-monitorDone
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP shutdown failed", "error", err)
 		_ = server.Close()
+	}
+	// The model process has its own bounded grace period after requests drain.
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), cfg.Runner.ShutdownTimeout+time.Second)
+	defer cancelStop()
+	if manager.Status().State != runner.Stopped {
+		if _, err := manager.Stop(stopCtx); err != nil {
+			logger.Warn("runner shutdown failed", "error", err)
+		}
 	}
 	if serverErr != nil && !errors.Is(serverErr, http.ErrServerClosed) {
 		return serverErr

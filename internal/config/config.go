@@ -92,6 +92,12 @@ func FromEnv() (Config, error) {
 		return Config{}, fmt.Errorf("invalid API limits: %w", err)
 	}
 
+	if value := os.Getenv("MYLLAMA_IDLE_TIMEOUT"); value != "" {
+		apiConfig.IdleTimeout, err = time.ParseDuration(value)
+		if err != nil || apiConfig.IdleTimeout < 0 {
+			return Config{}, fmt.Errorf("MYLLAMA_IDLE_TIMEOUT must be a non-negative Go duration")
+		}
+	}
 	logMaxBytes, err := positiveInt64Env("MYLLAMA_LOG_MAX_BYTES", 10<<20)
 	if err != nil {
 		return Config{}, err

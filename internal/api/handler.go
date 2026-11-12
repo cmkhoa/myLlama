@@ -32,6 +32,7 @@ type Config struct {
 	DefaultMaxTokens   int
 	QueueCapacity      int
 	RequestTimeout     time.Duration
+	IdleTimeout        time.Duration
 }
 
 // DefaultConfig returns conservative limits for one local llama.cpp runner.
@@ -64,6 +65,9 @@ func (c Config) Validate() error {
 	if c.QueueCapacity <= 0 {
 		return errors.New("queue capacity must be greater than zero")
 	}
+	if c.IdleTimeout < 0 {
+		return errors.New("idle timeout must not be negative")
+	}
 	if c.RequestTimeout <= 0 {
 		return errors.New("request timeout must be greater than zero")
 	}
@@ -72,12 +76,16 @@ func (c Config) Validate() error {
 
 // Handler owns routing for the public API.
 type Handler struct {
-	runner  runnerService
-	logger  *slog.Logger
-	queue   *queue.Queue[chatResult]
-	client  *http.Client
-	metrics *metrics.Collector
-	config  Config
+	runner       runnerService
+	logger       *slog.Logger
+	queue        *queue.Queue[chatResult]
+	client       *http.Client
+	metrics      *metrics.Collector
+	config       Config
+	serve        http.Handler
+	activityMu   sync.Mutex
+	active       int
+	lastActivity time.Time
 }
 
 // runnerService is the lifecycle surface the HTTP API needs. Keeping it small
@@ -96,18 +104,18 @@ type runnerService interface {
 type requestIDKey struct{}
 
 // NewHandler constructs the v1 API handler.
-func NewHandler(manager *runner.Manager, logger *slog.Logger) http.Handler {
+func NewHandler(manager *runner.Manager, logger *slog.Logger) *Handler {
 	return NewHandlerWithConfig(manager, logger, DefaultConfig())
 }
 
 // NewHandlerWithConfig constructs a handler with validated startup-time API
 // limits. Callers loading configuration from the environment should validate it
 // before this point.
-func NewHandlerWithConfig(manager *runner.Manager, logger *slog.Logger, config Config) http.Handler {
+func NewHandlerWithConfig(manager *runner.Manager, logger *slog.Logger, config Config) *Handler {
 	return newHandler(manager, logger, config)
 }
 
-func newHandler(manager runnerService, logger *slog.Logger, config Config) http.Handler {
+func newHandler(manager runnerService, logger *slog.Logger, config Config) *Handler {
 	if err := config.Validate(); err != nil {
 		panic(fmt.Sprintf("invalid API config: %v", err))
 	}
@@ -128,7 +136,9 @@ func newHandler(manager runnerService, logger *slog.Logger, config Config) http.
 	mux.HandleFunc("POST /v1/runners/stop", h.stopRunner)
 	mux.HandleFunc("POST /v1/chat/completions", h.chatCompletion)
 	mux.HandleFunc("GET /metrics", h.metricsSnapshot)
-	return h.withJSON(mux)
+	h.lastActivity = time.Now()
+	h.serve = h.withJSON(mux)
+	return h
 }
 
 func (h *Handler) runnerStatus(w http.ResponseWriter, r *http.Request) {

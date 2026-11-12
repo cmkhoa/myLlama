@@ -124,3 +124,25 @@ func TestFromEnvRejectsDefaultMaxTokensAboveMaximum(t *testing.T) {
 		t.Fatal("FromEnv() error = nil, want error")
 	}
 }
+
+func TestOperationalSettings(t *testing.T) {
+	t.Setenv("MYLLAMA_IDLE_TIMEOUT", "15m")
+	t.Setenv("MYLLAMA_LOG_PATH", "/tmp/myLlama.log")
+	t.Setenv("MYLLAMA_LOG_MAX_BYTES", "4096")
+	t.Setenv("MYLLAMA_LOG_BACKUPS", "2")
+	cfg, err := FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.API.IdleTimeout.String() != "15m0s" || cfg.LogMaxBytes != 4096 || cfg.LogBackups != 2 || cfg.LogPath != "/tmp/myLlama.log" {
+		t.Fatalf("settings = %#v", cfg)
+	}
+	for key, value := range map[string]string{"MYLLAMA_IDLE_TIMEOUT": "-1s", "MYLLAMA_LOG_MAX_BYTES": "0", "MYLLAMA_LOG_BACKUPS": "101"} {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv(key, value)
+			if _, err := FromEnv(); err == nil {
+				t.Fatal("expected configuration error")
+			}
+		})
+	}
+}
