@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"flag"
 	"log/slog"
+	"myLlama/internal/buildinfo"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +19,12 @@ import (
 )
 
 func main() {
+	version := flag.Bool("version", false, "print build information and exit")
+	flag.Parse()
+	if *version {
+		_ = json.NewEncoder(os.Stdout).Encode(buildinfo.Current())
+		return
+	}
 	cfg, err := config.FromEnv()
 	if err != nil {
 		slog.Error("invalid configuration", "error", err)

@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"myLlama/internal/buildinfo"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,9 +30,13 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("myLlamactl", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	address := flags.String("address", envOrDefault("MYLLAMA_API_URL", defaultAddress), "myLlama API URL")
+	version := flags.Bool("version", false, "print build information and exit")
 	flags.Usage = func() { fmt.Fprint(stderr, usage) }
 	if err := flags.Parse(arguments); err != nil {
 		return err
+	}
+	if *version {
+		return json.NewEncoder(stdout).Encode(buildinfo.Current())
 	}
 	if err := validateAddress(*address); err != nil {
 		return err
@@ -45,6 +50,8 @@ func run(arguments []string, stdout, stderr io.Writer) error {
 	client := &apiClient{baseURL: strings.TrimRight(*address, "/"), http: &http.Client{Timeout: 2 * time.Minute}}
 	command, args := remaining[0], remaining[1:]
 	switch command {
+	case "version":
+		return json.NewEncoder(stdout).Encode(buildinfo.Current())
 	case "status":
 		return client.printJSON(context.Background(), stdout, http.MethodGet, "/v1/runners/status", nil)
 	case "models":
