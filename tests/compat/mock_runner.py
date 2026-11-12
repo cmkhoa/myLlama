@@ -1,9 +1,27 @@
 #!/usr/bin/env python3
 """Deterministic test fixture, not an inference server. Accepts runner flags."""
 import argparse
+import os
+from pathlib import Path
+from socketserver import TCPServer
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import time
+
+def note(message):
+    path = os.environ.get('MYLLAMA_TEST_RUNNER_LOG')
+    if path:
+        with Path(path).open('a') as output:
+            output.write(message + '\n')
+
+class LocalServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer normally performs a reverse-DNS lookup here. Keep the
+        # fixture independent of hosted-runner DNS configuration.
+        TCPServer.server_bind(self)
+        self.server_name = 'localhost'
+        self.server_port = self.server_address[1]
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -48,6 +66,12 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, required=True)
     args, _ = parser.parse_known_args()
     try:
-        ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
+        note('binding local fixture')
+        server = LocalServer((args.host, args.port), Handler)
+        note('fixture listening')
+        server.serve_forever()
     except KeyboardInterrupt:
-        pass
+        note('fixture interrupted')
+    except BaseException:
+        note(traceback.format_exc())
+        raise

@@ -5,6 +5,7 @@ from pathlib import Path
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -35,6 +36,11 @@ def main():
     fixture.chmod(0o755)
     with tempfile.TemporaryDirectory(prefix='myLlama-sdk-') as directory:
         directory = Path(directory)
+        # Use the exact interpreter that runs this test; do not resolve another
+        # python3 through the daemon's inherited PATH on hosted macOS runners.
+        runner = directory / 'mock-runner'
+        runner.write_text('#!' + sys.executable + '\n' + fixture.read_text())
+        runner.chmod(0o755)
         model = directory / 'fixture.gguf'
         model.write_bytes(b'GGUF')
         api_port, runner_port = free_port(), free_port()
@@ -50,7 +56,8 @@ def main():
         env = {k:v for k,v in os.environ.items() if not k.startswith('MYLLAMA_')}
         env.update(MYLLAMA_LISTEN_ADDRESS=f'127.0.0.1:{api_port}',
             MYLLAMA_RUNNER_ADDRESS=f'127.0.0.1:{runner_port}',
-            MYLLAMA_LLAMA_SERVER_PATH=str(fixture), MYLLAMA_IDLE_TIMEOUT='1s',
+            MYLLAMA_LLAMA_SERVER_PATH=str(runner), MYLLAMA_IDLE_TIMEOUT='1s',
+            MYLLAMA_READINESS_TIMEOUT='6s', MYLLAMA_TEST_RUNNER_LOG=str(directory/'fixture.log'),
             MYLLAMA_LOG_PATH=str(directory / 'myLlama.log'))
         process = subprocess.Popen([str(ROOT / 'bin/myLlama')], env=env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -99,6 +106,11 @@ def main():
             log = (directory/'myLlama.log').read_text()
             assert 'private test prompt' not in log and 'Hello locally.' not in log
             assert 'idle runner stopped' in log
+        except BaseException:
+            for name in ['myLlama.log', 'fixture.log']:
+                path = directory / name
+                print(name + ':\n' + (path.read_text() if path.exists() else '(not created)'), file=sys.stderr)
+            raise
         finally:
             if process.poll() is None:
                 process.terminate()
