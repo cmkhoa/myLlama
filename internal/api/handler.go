@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -313,9 +314,21 @@ func (h *Handler) streamChatCompletion(w http.ResponseWriter, r *http.Request, r
 	ctx, cancel := context.WithTimeout(r.Context(), limits.RequestTimeout)
 	defer cancel()
 	var streamStarted atomic.Bool
+	var streamMu sync.Mutex
+	streamFinished := false
 	result, queueStats, err := h.queue.SubmitWithLimit(ctx, limits.QueueCapacity, func(ctx context.Context) (chatResult, error) {
+		streamMu.Lock()
+		defer streamMu.Unlock()
+		if streamFinished {
+			return chatResult{}, ctx.Err()
+		}
 		return h.proxyStream(ctx, request, w, &streamStarted)
 	})
+	// Submit may return on cancellation while its worker is still unwinding.
+	// Wait for writer ownership, then revoke it before the handler returns.
+	streamMu.Lock()
+	streamFinished = true
+	streamMu.Unlock()
 	if err != nil {
 		h.metrics.Record(metrics.Request{ErrorCategory: chatErrorCategory(err), QueueWait: queueStats.Wait, Latency: time.Since(started)})
 		var streamed *streamStartedError
