@@ -162,3 +162,42 @@ memory and lifecycle problem.
 **Consequence:** Parallel slots remain opt-in per profile and require
 benchmarking; session persistence and multi-model scheduling stay separate
 later phases.
+
+## 2026-11-11 — Release candidates and small delivery units
+
+**Choice:** Begin the public release train at 1.0.0-rc.1, then promote a tested
+contract to 1.0.0. Keep small improvements in focused, independently checked
+commits, including a separate fix for the pre-existing stream cancellation race.
+
+**Why:** The project is now long-term work. A versioned distribution needs
+repeatable builds and compatibility evidence without claiming untested inference
+support. A stable 1.0 does not require every future feature.
+
+**Consequence:** Explicit tags publish only after CI. Real-model validation and
+clean-machine installs remain promotion gates. Roadmap milestones follow
+measurements and dependencies rather than fixed dates.
+
+## 2026-11-11 — Private logs and explicit resource reclamation
+
+**Choice:** Add opt-in size/count-bounded JSON file logs, fixed info-level output,
+idle shutdown that excludes active/queued work, and child cleanup on service exit.
+
+**Why:** A local service should be diagnosable and reclaim memory without
+retaining user content or terminating admitted inference.
+
+**Consequence:** Log paths have one process owner; no age-based retention or raw
+upstream output is promised. Idle shutdown unloads only the model; users explicitly
+restart it. Admission is coordinated with idle stop to avoid a check/use race.
+
+## 2026-11-11 — Tested client subset and portable release artifacts
+
+**Choice:** Use a pinned real Python SDK against the service and a deterministic
+managed mock runner; distribute Linux/macOS binaries for amd64/arm64 with hashes
+and GitHub provenance. CI tests the Go minimum and current stable, but packages
+and vulnerability-checks with current stable.
+
+**Why:** Client integration and process ownership are testable without GPU access
+or downloading weights, while current compiler patches matter for shipped binaries.
+
+**Consequence:** Mock tests do not certify real models or full API compatibility.
+Windows, external hosting and additional backends remain separate proposals.

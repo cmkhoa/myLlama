@@ -54,3 +54,31 @@ runner is stopped or unhealthy.
 
 For endpoint-level examples, see the [API reference](API.md). For limits and
 environment variables, see [Operations and configuration](OPERATIONS.md).
+
+## First-run setup and scripts
+
+Installed binaries support `myLlamactl init [--directory PATH]`. It creates private
+`profiles.json` and `myLlama.env` files in the OS user configuration directory
+under `myLlama`. It never overwrites either file. Source the reported environment
+file before starting the server; add profiles manually or register a model through
+the API. Setup does not install the runner, download weights, or start a service.
+
+`myLlamactl doctor [--model PATH]` checks startup configuration, the runner
+executable, configured profiles and port availability. It does not verify GGUF
+contents, estimate memory or launch inference. An occupied port is reported as a
+preflight failure, including when it belongs to an already-running myLlama.
+
+Use global `--json` before the command for compact machine-readable output:
+
+```sh
+myLlamactl --json status
+myLlamactl --json chat "Say hello."
+myLlamactl --json doctor --model /absolute/path/to/model.gguf
+myLlamactl --version
+myLlama --version
+```
+
+JSON chat returns the entire completion, including usage. Errors are nonzero exits
+with a JSON error on stderr when `--json` is set; successful command data goes to
+stdout. Doctor prints its structured check report on stdout even when checks fail.
+Streaming remains SSE and cannot be combined with `--json`.
