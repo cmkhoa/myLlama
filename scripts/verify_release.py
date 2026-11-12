@@ -33,7 +33,7 @@ def main():
             for member in members:
                 assert member.isfile() and not PurePosixPath(member.name).is_absolute() and '..' not in PurePosixPath(member.name).parts
             names={PurePosixPath(m.name).name for m in members}
-            assert {'myLlama','myLlamactl','install.sh','README.md','VERSION'} <= names
+            assert {'myLlama','myLlamactl','install.sh','README.md','LICENSE','VERSION'} <= names
         verified.append(name)
         if name.endswith(f'_{system}_{arch}.tar.gz'):
             native=path

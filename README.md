@@ -65,3 +65,8 @@ make build
 
 myLlama does not download models, accept arbitrary runner arguments, retain
 prompts or completions, or support public/multi-user deployment.
+
+## License
+
+myLlama is licensed under the [MIT License](LICENSE). The `llama.cpp` runtime
+and model weights are distributed separately under their respective licenses.

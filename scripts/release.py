@@ -51,7 +51,7 @@ def main():
                 binary=Path(temp)/command
                 subprocess.run(['go','build','-trimpath','-buildvcs=false','-ldflags',flags,'-o',str(binary),'./cmd/'+command],cwd=ROOT,env=env,check=True)
                 files[command]=(binary.read_bytes(),0o755)
-            documents={name:name for name in ['README.md','CHANGELOG.md','VERSION','ROADMAP.md','CONTRIBUTING.md','DESIGN_LOG.md']}
+            documents={name:name for name in ['README.md','LICENSE','CHANGELOG.md','VERSION','ROADMAP.md','CONTRIBUTING.md','DESIGN_LOG.md']}
             documents.update({str(path.relative_to(ROOT)):str(path.relative_to(ROOT)) for path in (ROOT/'docs').glob('*.md')})
             documents.update({'install.sh':'scripts/install.sh','configs/profiles.example.json':'configs/profiles.example.json'})
             for name,path in documents.items():
