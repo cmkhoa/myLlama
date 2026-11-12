@@ -31,8 +31,8 @@ func (h *Handler) RunIdleMonitor(ctx context.Context) {
 	if h.config.IdleTimeout == 0 {
 		return
 	}
-	interval := min(h.config.IdleTimeout, time.Second)
-	ticker := time.NewTicker(interval)
+	// A fixed cadence also bounds overhead for sub-second configured timeouts.
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
